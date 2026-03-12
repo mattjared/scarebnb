@@ -9,6 +9,7 @@ import {
   executeDraftBookingMessage,
   executeGetBtcPrice,
   executeCompareWeather,
+  executeGenerateTripPage,
 } from "@/lib/tools";
 
 export async function POST(req: Request) {
@@ -29,7 +30,8 @@ YOUR WORKFLOW:
 4. ALWAYS calculate the Bitcoin cost for any recommended listing using get_btc_price. Guests love knowing how many sats their haunted getaway costs.
 5. BRANCH your decisions — if weather is bad at one spot, automatically check alternatives.
 6. When you've landed on a recommendation, generate a trip dossier.
-7. Offer to draft a booking message. If the user agrees, draft it in the host's response vibe style.
+7. ALWAYS call generate_trip_page as your FINAL tool call to create a shareable preview page. Pass ALL the data you've gathered (weather, BTC cost, events, packing list, your recommendation). This is the deliverable.
+8. Offer to draft a booking message. If the user agrees, draft it in the host's response vibe style.
 
 PERSONALITY:
 - Darkly funny, slightly ominous, but genuinely helpful
@@ -133,6 +135,31 @@ RULES:
           destination_country: z.string().optional().describe("Destination country code"),
         }),
         execute: async (args) => executeCompareWeather(args),
+      }),
+      generate_trip_page: tool({
+        description:
+          "Generate a beautiful shareable trip page with all gathered data. Call this as your FINAL step after gathering weather, BTC price, events, and making your recommendation. The page will be rendered in the preview panel.",
+        inputSchema: z.object({
+          listing_id: z.number(),
+          nights: z.number().describe("Number of nights for the stay"),
+          weather_summary: z.string().describe("Full weather description"),
+          weather_temp_c: z.number().describe("Temperature in Celsius"),
+          weather_condition: z.string().describe("e.g. 'Clear sky', 'Heavy rain'"),
+          client_city: z.string().optional().describe("Guest's home city"),
+          client_weather_summary: z.string().optional().describe("Weather at the guest's home city"),
+          temperature_difference: z.string().optional().describe("e.g. '12°C warmer at destination'"),
+          btc_needed: z.string().optional().describe("BTC amount as string, e.g. '0.00123456'"),
+          satoshis_needed: z.number().optional(),
+          btc_verdict: z.string().optional().describe("Snarky verdict about the BTC cost"),
+          events: z.array(z.object({
+            name: z.string(),
+            date: z.string(),
+            description: z.string(),
+          })).describe("Nearby events"),
+          packing_list: z.array(z.string()).describe("Suggested items to pack based on weather, listing quirks, and ghost activity"),
+          agent_recommendation: z.string().describe("Your final pitch for why this listing is THE ONE"),
+        }),
+        execute: async (args) => executeGenerateTripPage(args),
       }),
     },
   });

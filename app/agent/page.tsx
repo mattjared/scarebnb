@@ -3,8 +3,9 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
+import { track } from "@vercel/analytics";
 import Link from "next/link";
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 
 const agentTransport = new DefaultChatTransport({ api: "/api/agent" });
 
@@ -13,11 +14,32 @@ export default function AgentPage() {
     transport: agentTransport,
   });
   const [input, setInput] = useState("");
+  const [tripPageUrl, setTripPageUrl] = useState<string | null>(null);
   const isLoading = status === "streaming" || status === "submitted";
+
+  // Watch for generate_trip_page tool results to auto-show the preview
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      for (const part of m.parts) {
+        // Check for tool invocation results that contain a trip page URL
+        const p = part as { type: string; state?: string; output?: { url?: string; type?: string } };
+        if (
+          p.state === "output-available" &&
+          p.output?.type === "trip_page" &&
+          p.output?.url
+        ) {
+          setTripPageUrl(p.output.url);
+          track("trip_page_generated", { url: p.output.url });
+        }
+      }
+    }
+  }, [messages]);
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    track("agent_message_sent", { message_length: input.length });
     sendMessage({ text: input });
     setInput("");
   }
@@ -27,12 +49,12 @@ export default function AgentPage() {
       {/* Chat panel */}
       <div
         style={{
-          flex: 1,
+          width: 380,
           display: "flex",
           flexDirection: "column",
-          maxWidth: 600,
           padding: "1rem",
           borderRight: "1px solid #ddd",
+          flexShrink: 0,
         }}
       >
         <div>
@@ -72,14 +94,14 @@ export default function AgentPage() {
               border: "1px solid #ccc",
               background: "#fff",
               color: "#171717",
-              fontSize: "1rem",
+              fontSize: "0.9rem",
             }}
           />
           <button
             type="submit"
             disabled={isLoading}
             style={{
-              padding: "0.75rem 1.5rem",
+              padding: "0.75rem 1rem",
               borderRadius: 8,
               border: "1px solid #ccc",
               background: "#f0f0f0",
@@ -95,11 +117,12 @@ export default function AgentPage() {
       {/* Agent trace panel */}
       <div
         style={{
-          width: 400,
+          width: 320,
           padding: "1rem",
           overflowY: "auto",
           fontSize: "0.85rem",
           flexShrink: 0,
+          borderRight: "1px solid #ddd",
         }}
       >
         <h3 style={{ marginBottom: "1rem", opacity: 0.7 }}>Agent Trace</h3>
@@ -109,6 +132,64 @@ export default function AgentPage() {
         {messages.map((m) => (
           <TraceEntries key={m.id} message={m} />
         ))}
+      </div>
+
+      {/* Trip page preview panel */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            padding: "0.75rem 1rem",
+            borderBottom: "1px solid #ddd",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: "0.85rem",
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>Preview</span>
+          {tripPageUrl && (
+            <a
+              href={tripPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => track("trip_page_opened", { url: tripPageUrl })}
+              style={{ color: "#2563eb", textDecoration: "none" }}
+            >
+              Open in new tab ↗
+            </a>
+          )}
+        </div>
+        {tripPageUrl ? (
+          <iframe
+            src={tripPageUrl}
+            style={{
+              flex: 1,
+              border: "none",
+              width: "100%",
+            }}
+            title="Trip page preview"
+          />
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#ccc",
+              fontSize: "0.9rem",
+            }}
+          >
+            Trip page will appear here once the agent generates it...
+          </div>
+        )}
       </div>
     </div>
   );
@@ -121,13 +202,14 @@ function MessageBubble({ message }: { message: UIMessage }) {
   return (
     <div
       style={{
-        marginBottom: "1rem",
-        padding: "0.75rem",
+        marginBottom: "0.75rem",
+        padding: "0.6rem",
         borderRadius: 8,
         background: message.role === "user" ? "#f0f0f0" : "#f8f8f8",
+        fontSize: "0.9rem",
       }}
     >
-      <strong style={{ fontSize: "0.8rem", opacity: 0.6 }}>
+      <strong style={{ fontSize: "0.75rem", opacity: 0.6 }}>
         {message.role === "user" ? "You" : "Agent"}
       </strong>
       {textParts.map((part, i) => (

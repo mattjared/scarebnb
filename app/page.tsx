@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { track } from "@vercel/analytics";
 
 export default function Home() {
   return (
@@ -11,6 +14,7 @@ export default function Home() {
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
         <Link
           href="/browse"
+          onClick={() => track("nav_click", { destination: "browse" })}
           style={{
             display: "block",
             padding: "1.5rem",
@@ -29,6 +33,7 @@ export default function Home() {
 
         <Link
           href="/chat"
+          onClick={() => track("nav_click", { destination: "chat" })}
           style={{
             display: "block",
             padding: "1.5rem",
@@ -47,6 +52,7 @@ export default function Home() {
 
         <Link
           href="/agent"
+          onClick={() => track("nav_click", { destination: "agent" })}
           style={{
             display: "block",
             padding: "1.5rem",
@@ -65,7 +71,11 @@ export default function Home() {
       </div>
 
       <p style={{ marginTop: "2rem", fontSize: "0.9rem", opacity: 0.5 }}>
-        <a href="/api/listings" style={{ color: "inherit" }}>
+        <a
+          href="/api/listings"
+          onClick={() => track("nav_click", { destination: "api" })}
+          style={{ color: "inherit" }}
+        >
           Open API →
         </a>
       </p>

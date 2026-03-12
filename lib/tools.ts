@@ -1,6 +1,8 @@
 import { getWeather } from "./weather";
 import { getListingById } from "./listings";
 import { Listing } from "./types";
+import { generateTripPageHTML, TripPageData } from "./trip-page-template";
+import { saveTripPage, generateTripId } from "./trip-store";
 
 // --- Crypto price (CoinGecko free API) ---
 
@@ -271,5 +273,72 @@ export async function executeDraftBookingMessage(args: {
     guest_context: args.guest_message_context || "",
     status: "awaiting_approval",
     note: "This draft requires human approval before sending.",
+  };
+}
+
+// --- Generate shareable trip page ---
+
+export async function executeGenerateTripPage(args: {
+  listing_id: number;
+  nights: number;
+  weather_summary: string;
+  weather_temp_c: number;
+  weather_condition: string;
+  client_city?: string;
+  client_weather_summary?: string;
+  temperature_difference?: string;
+  btc_needed?: string;
+  satoshis_needed?: number;
+  btc_verdict?: string;
+  events: { name: string; date: string; description: string }[];
+  packing_list: string[];
+  agent_recommendation: string;
+}) {
+  const listing = await getListingById(args.listing_id);
+  if (!listing) return { error: `Listing ${args.listing_id} not found` };
+
+  const pageId = generateTripId();
+
+  const data: TripPageData = {
+    property_name: listing.property_name,
+    tagline: listing.tagline,
+    location: listing.location,
+    city: listing.city,
+    country: listing.country,
+    price_per_night: listing.price_per_night,
+    nights: args.nights,
+    total_cost_usd: listing.price_per_night * args.nights,
+    rating: listing.rating,
+    scare_score: listing.scare_score,
+    weirdness_score: listing.weirdness_score,
+    ghost_sighting_frequency: listing.ghost_sighting_frequency,
+    host_name: listing.host_name,
+    host_response_vibe: listing.host_response_vibe,
+    amenities: listing.amenities,
+    house_rules: listing.house_rules,
+    weather_summary: args.weather_summary,
+    weather_temp_c: args.weather_temp_c,
+    weather_condition: args.weather_condition,
+    client_city: args.client_city,
+    client_weather_summary: args.client_weather_summary,
+    temperature_difference: args.temperature_difference,
+    btc_needed: args.btc_needed,
+    satoshis_needed: args.satoshis_needed,
+    btc_verdict: args.btc_verdict,
+    events: args.events || [],
+    packing_list: args.packing_list || [],
+    agent_recommendation: args.agent_recommendation,
+  };
+
+  const html = generateTripPageHTML(data, pageId);
+  saveTripPage(pageId, html);
+
+  return {
+    type: "trip_page",
+    page_id: pageId,
+    url: `/api/trip-page/${pageId}`,
+    property_name: listing.property_name,
+    status: "generated",
+    note: "Trip page is live! Share the URL or view it in the preview panel.",
   };
 }

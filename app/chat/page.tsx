@@ -2,6 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
+import { track } from "@vercel/analytics";
 import Link from "next/link";
 import { useState, FormEvent } from "react";
 
@@ -17,6 +18,7 @@ export default function ChatPage() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    track("chat_message_sent", { message_length: input.length });
     sendMessage({ text: input });
     setInput("");
   }

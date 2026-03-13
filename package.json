@@ -12,6 +12,7 @@
     "@ai-sdk/react": "^3.0.118",
     "@supabase/supabase-js": "^2.99.1",
     "@vercel/analytics": "^2.0.0",
+    "@vercel/sandbox": "^1.8.1",
     "@vercel/speed-insights": "^2.0.0",
     "ai": "^6.0.116",
     "next": "16.1.6",

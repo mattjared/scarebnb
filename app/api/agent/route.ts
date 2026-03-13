@@ -10,6 +10,7 @@ import {
   executeGetBtcPrice,
   executeCompareWeather,
   executeGenerateTripPage,
+  executeSandboxAnalysis,
 } from "@/lib/tools";
 
 export async function POST(req: Request) {
@@ -28,10 +29,11 @@ YOUR WORKFLOW:
 2. Be PROACTIVE — don't wait to be asked. If you're recommending a listing, check its weather. If comparing options, look up events at both locations.
 3. ALWAYS ask the user where they're currently located, then use compare_weather to show how the destination weather compares to their home city.
 4. ALWAYS calculate the Bitcoin cost for any recommended listing using get_btc_price. Guests love knowing how many sats their haunted getaway costs.
-5. BRANCH your decisions — if weather is bad at one spot, automatically check alternatives.
-6. When you've landed on a recommendation, generate a trip dossier.
-7. ALWAYS call generate_trip_page as your FINAL tool call to create a shareable preview page. Pass ALL the data you've gathered (weather, BTC cost, events, packing list, your recommendation). This is the deliverable.
-8. Offer to draft a booking message. If the user agrees, draft it in the host's response vibe style.
+5. ALWAYS run run_sandbox_analysis to compute a detailed budget breakdown, currency conversions, and value score in an isolated Vercel Sandbox. This shows the guest exactly what they're getting per dollar.
+6. BRANCH your decisions — if weather is bad at one spot, automatically check alternatives.
+7. When you've landed on a recommendation, generate a trip dossier.
+8. ALWAYS call generate_trip_page as your FINAL tool call to create a shareable preview page. Pass ALL the data you've gathered (weather, BTC cost, events, packing list, your recommendation). This is the deliverable.
+9. Offer to draft a booking message. If the user agrees, draft it in the host's response vibe style.
 
 PERSONALITY:
 - Darkly funny, slightly ominous, but genuinely helpful
@@ -48,7 +50,7 @@ RULES:
 - The trip dossier is your masterpiece — make it thorough
 - Booking messages MUST match the host's vibe`,
     messages: await convertToModelMessages(messages),
-    stopWhen: stepCountIs(10),
+    stopWhen: stepCountIs(15),
     tools: {
       get_weather: tool({
         description:
@@ -135,6 +137,20 @@ RULES:
           destination_country: z.string().optional().describe("Destination country code"),
         }),
         execute: async (args) => executeCompareWeather(args),
+      }),
+      run_sandbox_analysis: tool({
+        description:
+          "Run a detailed trip budget analysis in an isolated Vercel Sandbox. Computes cost breakdowns, currency conversions (EUR, GBP, JPY, CHF, etc.), per-guest costs, value scores, and a fun screams-per-dollar metric. Always call this for any recommended listing.",
+        inputSchema: z.object({
+          listing_id: z.number().describe("The listing to analyze"),
+          nights: z.number().describe("Number of nights"),
+          guest_count: z.number().describe("Number of guests"),
+          extra_budget_usd: z
+            .number()
+            .optional()
+            .describe("Extra budget beyond accommodation (food, activities, etc.)"),
+        }),
+        execute: async (args) => executeSandboxAnalysis(args),
       }),
       generate_trip_page: tool({
         description:

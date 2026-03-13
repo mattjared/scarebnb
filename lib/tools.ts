@@ -3,6 +3,7 @@ import { getListingById } from "./listings";
 import { Listing } from "./types";
 import { generateTripPageHTML, TripPageData } from "./trip-page-template";
 import { saveTripPage, generateTripId } from "./trip-store";
+import { Sandbox } from "@vercel/sandbox";
 
 // --- Crypto price (CoinGecko free API) ---
 
@@ -341,4 +342,105 @@ export async function executeGenerateTripPage(args: {
     status: "generated",
     note: "Trip page is live! Share the URL or view it in the preview panel.",
   };
+}
+
+// --- Vercel Sandbox: run trip budget analysis ---
+
+export async function executeSandboxAnalysis(args: {
+  listing_id: number;
+  nights: number;
+  guest_count: number;
+  extra_budget_usd?: number;
+}) {
+  const listing = await getListingById(args.listing_id);
+  if (!listing) return { error: `Listing ${args.listing_id} not found` };
+
+  const script = `
+const listing = ${JSON.stringify({
+    property_name: listing.property_name,
+    city: listing.city,
+    country: listing.country,
+    price_per_night: listing.price_per_night,
+    scare_score: listing.scare_score,
+    weirdness_score: listing.weirdness_score,
+    rating: listing.rating,
+    reviews_count: listing.reviews_count,
+  })};
+
+const nights = ${args.nights};
+const guests = ${args.guest_count};
+const extraBudget = ${args.extra_budget_usd ?? 0};
+
+// --- Core cost calculations ---
+const accommodationCost = listing.price_per_night * nights;
+const costPerGuest = accommodationCost / guests;
+const costPerGuestPerNight = listing.price_per_night / guests;
+
+// --- Currency conversions (approximate rates) ---
+const rates = { EUR: 0.92, GBP: 0.79, JPY: 149.50, CHF: 0.88, AUD: 1.53, BRL: 4.97, MXN: 17.15 };
+const conversions = {};
+for (const [currency, rate] of Object.entries(rates)) {
+  conversions[currency] = Math.round(accommodationCost * rate * 100) / 100;
+}
+
+// --- Value score (proprietary ScareBNB algorithm) ---
+const scarePerDollar = listing.scare_score / listing.price_per_night;
+const weirdPerDollar = listing.weirdness_score / listing.price_per_night;
+const reviewConfidence = Math.min(listing.reviews_count / 100, 1.0);
+const valueScore = Math.round(
+  (listing.rating * 15 + scarePerDollar * 500 + weirdPerDollar * 300) * reviewConfidence
+);
+
+// --- Budget breakdown ---
+const totalBudget = accommodationCost + extraBudget;
+const estimatedFood = nights * guests * 35;
+const estimatedTransport = nights * 20;
+const estimatedActivities = nights * guests * 25;
+const totalEstimatedSpend = accommodationCost + estimatedFood + estimatedTransport + estimatedActivities;
+const budgetRemaining = totalBudget - totalEstimatedSpend;
+
+// --- Fun stats ---
+const ghostsPerDollar = listing.scare_score > 5 ? (accommodationCost / listing.scare_score).toFixed(2) : "N/A (not haunted enough)";
+const screamValue = listing.scare_score >= 7 ? "Excellent screams-per-dollar ratio" : listing.scare_score >= 4 ? "Moderate spook factor for the price" : "More quirky than scary — budget-friendly vibes";
+
+const result = {
+  property: listing.property_name,
+  location: listing.city + ", " + listing.country,
+  accommodation: { total_usd: accommodationCost, per_guest_usd: costPerGuest, per_guest_per_night_usd: costPerGuestPerNight },
+  currency_conversions: conversions,
+  budget_breakdown: { accommodation: accommodationCost, estimated_food: estimatedFood, estimated_transport: estimatedTransport, estimated_activities: estimatedActivities, total_estimated: totalEstimatedSpend, extra_budget: extraBudget, remaining: budgetRemaining, verdict: budgetRemaining >= 0 ? "Budget looks good — you can afford the ghosts." : "Over budget by $" + Math.abs(budgetRemaining) + ". Consider fewer nights or embracing austerity." },
+  value_analysis: { value_score: valueScore, scare_per_dollar: Math.round(scarePerDollar * 1000) / 1000, weird_per_dollar: Math.round(weirdPerDollar * 1000) / 1000, review_confidence: Math.round(reviewConfidence * 100) + "%", ghost_cost: ghostsPerDollar, scream_value: screamValue },
+  sandbox_meta: { runtime: "Vercel Sandbox", engine: "Node.js", note: "This analysis was computed in an isolated Vercel Sandbox environment" }
+};
+
+console.log(JSON.stringify(result));
+`;
+
+  try {
+    const sandbox = await Sandbox.create();
+    const cmd = await sandbox.runCommand("node", ["-e", script]);
+    const stdout = await cmd.stdout();
+    await sandbox.stop();
+
+    try {
+      const parsed = JSON.parse(stdout.trim());
+      return parsed;
+    } catch {
+      return {
+        raw_output: stdout.trim(),
+        sandbox_meta: { runtime: "Vercel Sandbox", note: "Output was not JSON — raw result returned" },
+      };
+    }
+  } catch (err) {
+    return {
+      error: "Sandbox execution failed",
+      details: err instanceof Error ? err.message : String(err),
+      fallback: {
+        property: listing.property_name,
+        total_cost_usd: listing.price_per_night * args.nights,
+        per_guest_usd: (listing.price_per_night * args.nights) / args.guest_count,
+        note: "Computed without sandbox — the spirits interfered with the isolated environment.",
+      },
+    };
+  }
 }
